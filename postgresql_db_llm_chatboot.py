@@ -1,28 +1,34 @@
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_openai import ChatOpenAI
+import os
 import psycopg2
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-import os
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from langchain_openai import ChatOpenAI
+from urllib.parse import urlparse
 
-# Load environment variables from .env file
+# Load environment variables from .env file (only needed locally)
 load_dotenv()
 
-# Retrieve OpenAI API key from the environment
+# Retrieve the OpenAI API key and PostgreSQL DATABASE_URL from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    raise ValueError("OpenAI API key not found in .env file. Please add 'OPENAI_API_KEY'.")
+    raise ValueError("OpenAI API key not found in environment variables. Please add 'OPENAI_API_KEY'.")
 
-# PostgreSQL connection parameters
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found in environment variables. Please add it to Render's environment.")
+
+# Parse the DATABASE_URL to extract database connection parameters
+url = urlparse(DATABASE_URL)
 db_params = {
-    "dbname": "work1",  # Your database name
-    "user": "postgres",  # Your database user
-    "password": "admin123",  # Your database password
-    "host": "localhost",  # Your host (localhost if local)
-    "port": "5432"  # Default PostgreSQL port
+    "dbname": url.path[1:],  # Database name (after the slash)
+    "user": url.username,     # Username
+    "password": url.password, # Password
+    "host": url.hostname,     # Hostname
+    "port": url.port or 5432  # Port (default to 5432 if not provided)
 }
 
 # Define the OpenAI prompt template
@@ -33,9 +39,20 @@ Question: {question}
 
 SQL Query:"""
 
+# Define the LangChain prompt object
 prompt = ChatPromptTemplate.from_template(template)
 
-# Define function to get PostgreSQL schema
+# Set up LangChain pipeline with OpenAI
+llm = ChatOpenAI(openai_api_key=openai_api_key)
+
+sql_chain = (
+    RunnablePassthrough.assign(schema=lambda _: get_schema(db_params))
+    | prompt
+    | llm.bind(stop=["\nSQLResult:"])
+    | StrOutputParser()
+)
+
+# Function to retrieve PostgreSQL schema
 def get_schema(db_params):
     try:
         # Connect to the PostgreSQL database
@@ -52,16 +69,6 @@ def get_schema(db_params):
                 return schema_str
     except Exception as e:
         return f"Error retrieving schema: {e}"
-
-# Set up LangChain pipeline with OpenAI
-llm = ChatOpenAI(openai_api_key=openai_api_key)
-
-sql_chain = (
-    RunnablePassthrough.assign(schema=lambda _: get_schema(db_params))
-    | prompt
-    | llm.bind(stop=["\nSQLResult:"])
-    | StrOutputParser()
-)
 
 # Streamlit interface
 st.title("Ask Question Based on Database")
