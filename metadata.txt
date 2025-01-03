@@ -1,0 +1,31 @@
+How many students are there in total?: SELECT COUNT(*) AS total_students FROM student;
+How many students are there in each state?: 
+        SELECT address.state, COUNT(student.id) AS student_count
+        FROM student
+        JOIN address ON student.id = address.student_id
+        GROUP BY address.state;
+    
+Which teachers teach more than one distinct course, and how many courses do they teach?: 
+        SELECT teacher, COUNT(DISTINCT course) AS course_count
+        FROM class
+        GROUP BY teacher
+        HAVING COUNT(DISTINCT course) > 0;
+    
+What are the names and details of courses for students older than {age}?: 
+        SELECT student.name, class.course, class.branch, class.year
+        FROM student
+        JOIN class ON student.id = class.student_id
+        WHERE student.age > {age};
+    
+What are the details of students including name, email, and their address?: 
+        SELECT student.name, student.email_id, address.city, address.state, address.house_number
+        FROM student
+        JOIN address ON student.id = address.student_id;
+    
+How many students are enrolled in each course?: 
+        SELECT class.course, COUNT(student.id) AS student_count
+        FROM class
+        JOIN student ON class.student_id = student.id
+        GROUP BY class.course;
+    
+What are the details of all students in the database?: SELECT * FROM student;
